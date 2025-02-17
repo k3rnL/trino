@@ -15,10 +15,12 @@ package io.trino.sql.planner.iterative.rule.test;
 
 import com.google.common.base.Functions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableListMultimap;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Maps;
+import io.airlift.slice.Slice;
 import io.trino.Session;
 import io.trino.cost.PlanNodeStatsEstimate;
 import io.trino.metadata.FunctionResolver;
@@ -795,7 +797,8 @@ public class PlanBuilder
                 Optional.empty(),
                 schemaTableName,
                 mergeParadigmAndTypes,
-                List.of());
+                List.of(),
+                ImmutableListMultimap.of());
     }
 
     public ExchangeNode gatheringExchange(ExchangeNode.Scope scope, PlanNode child)
@@ -1181,7 +1184,7 @@ public class PlanBuilder
             Expression filter,
             Optional<Symbol> leftPartitionSymbol,
             Optional<Symbol> rightPartitionSymbol,
-            Optional<String> kdbTree)
+            Optional<Slice> kdbTree)
     {
         return new SpatialJoinNode(
                 idAllocator.getNextId(),

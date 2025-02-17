@@ -83,6 +83,8 @@ public interface TrinoCatalog
 
     List<TableInfo> listTables(ConnectorSession session, Optional<String> namespace);
 
+    List<SchemaTableName> listIcebergTables(ConnectorSession session, Optional<String> namespace);
+
     default List<SchemaTableName> listViews(ConnectorSession session, Optional<String> namespace)
     {
         return listTables(session, namespace).stream()
@@ -144,7 +146,7 @@ public interface TrinoCatalog
      * @return Iceberg table loaded
      * @throws UnknownTableTypeException if table is not of Iceberg type in the metastore
      */
-    Table loadTable(ConnectorSession session, SchemaTableName schemaTableName);
+    BaseTable loadTable(ConnectorSession session, SchemaTableName schemaTableName);
 
     /**
      * Bulk load column metadata. The returned map may contain fewer entries then asked for.

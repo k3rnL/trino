@@ -123,7 +123,8 @@ import static io.trino.plugin.iceberg.IcebergTableProperties.DATA_LOCATION_PROPE
 import static io.trino.plugin.iceberg.IcebergTableProperties.FILE_FORMAT_PROPERTY;
 import static io.trino.plugin.iceberg.IcebergTableProperties.FORMAT_VERSION_PROPERTY;
 import static io.trino.plugin.iceberg.IcebergTableProperties.LOCATION_PROPERTY;
-import static io.trino.plugin.iceberg.IcebergTableProperties.OBJECT_STORE_ENABLED_PROPERTY;
+import static io.trino.plugin.iceberg.IcebergTableProperties.MAX_COMMIT_RETRY;
+import static io.trino.plugin.iceberg.IcebergTableProperties.OBJECT_STORE_LAYOUT_ENABLED_PROPERTY;
 import static io.trino.plugin.iceberg.IcebergTableProperties.ORC_BLOOM_FILTER_COLUMNS_PROPERTY;
 import static io.trino.plugin.iceberg.IcebergTableProperties.ORC_BLOOM_FILTER_FPP_PROPERTY;
 import static io.trino.plugin.iceberg.IcebergTableProperties.PARQUET_BLOOM_FILTER_COLUMNS_PROPERTY;
@@ -171,6 +172,7 @@ import static java.lang.String.format;
 import static java.math.RoundingMode.UNNECESSARY;
 import static java.util.Comparator.comparing;
 import static java.util.Objects.requireNonNull;
+import static org.apache.iceberg.TableProperties.COMMIT_NUM_RETRIES;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 import static org.apache.iceberg.TableProperties.FORMAT_VERSION;
@@ -196,6 +198,7 @@ public final class IcebergUtil
     public static final String METADATA_FOLDER_NAME = "metadata";
     public static final String METADATA_FILE_EXTENSION = ".metadata.json";
     public static final String TRINO_QUERY_ID_NAME = "trino_query_id";
+    public static final String TRINO_USER_NAME = "trino_user";
     // For backward compatibility only. DO NOT USE.
     private static final String BROKEN_ORC_BLOOM_FILTER_FPP_KEY = "orc.bloom.filter.fpp";
     // For backward compatibility only. DO NOT USE.
@@ -214,7 +217,7 @@ public final class IcebergUtil
 
     private IcebergUtil() {}
 
-    public static Table loadIcebergTable(TrinoCatalog catalog, IcebergTableOperationsProvider tableOperationsProvider, ConnectorSession session, SchemaTableName table)
+    public static BaseTable loadIcebergTable(TrinoCatalog catalog, IcebergTableOperationsProvider tableOperationsProvider, ConnectorSession session, SchemaTableName table)
     {
         TableOperations operations = tableOperationsProvider.createTableOperations(
                 catalog,
@@ -226,7 +229,7 @@ public final class IcebergUtil
         return new BaseTable(operations, quotedTableName(table), TRINO_METRICS_REPORTER);
     }
 
-    public static Table getIcebergTableWithMetadata(
+    public static BaseTable getIcebergTableWithMetadata(
             TrinoCatalog catalog,
             IcebergTableOperationsProvider tableOperationsProvider,
             ConnectorSession session,
@@ -296,7 +299,7 @@ public final class IcebergUtil
         return ImmutableList.copyOf(path.reversed());
     }
 
-    public static Map<String, Object> getIcebergTableProperties(Table icebergTable)
+    public static Map<String, Object> getIcebergTableProperties(BaseTable icebergTable)
     {
         ImmutableMap.Builder<String, Object> properties = ImmutableMap.builder();
         properties.put(FILE_FORMAT_PROPERTY, getFileFormat(icebergTable));
@@ -315,8 +318,13 @@ public final class IcebergUtil
             properties.put(LOCATION_PROPERTY, icebergTable.location());
         }
 
-        int formatVersion = ((BaseTable) icebergTable).operations().current().formatVersion();
+        int formatVersion = icebergTable.operations().current().formatVersion();
         properties.put(FORMAT_VERSION_PROPERTY, formatVersion);
+
+        if (icebergTable.properties().containsKey(COMMIT_NUM_RETRIES)) {
+            int commitNumRetries = parseInt(icebergTable.properties().get(COMMIT_NUM_RETRIES));
+            properties.put(MAX_COMMIT_RETRY, commitNumRetries);
+        }
 
         // iceberg ORC format bloom filter properties
         Optional<String> orcBloomFilterColumns = getOrcBloomFilterColumns(icebergTable.properties());
@@ -336,7 +344,7 @@ public final class IcebergUtil
         }
 
         if (parseBoolean(icebergTable.properties().getOrDefault(OBJECT_STORE_ENABLED, "false"))) {
-            properties.put(OBJECT_STORE_ENABLED_PROPERTY, true);
+            properties.put(OBJECT_STORE_LAYOUT_ENABLED_PROPERTY, true);
         }
 
         Optional<String> dataLocation = Optional.ofNullable(icebergTable.properties().get(WRITE_DATA_LOCATION));
@@ -431,10 +439,15 @@ public final class IcebergUtil
 
     public static Schema schemaFromHandles(List<IcebergColumnHandle> columns)
     {
+        return structTypeFromHandles(columns).asSchema();
+    }
+
+    public static StructType structTypeFromHandles(List<IcebergColumnHandle> columns)
+    {
         List<NestedField> icebergColumns = columns.stream()
                 .map(column -> NestedField.optional(column.getId(), column.getName(), toIcebergType(column.getType(), column.getColumnIdentity())))
                 .collect(toImmutableList());
-        return new Schema(StructType.of(icebergColumns).asStructType().fields());
+        return StructType.of(icebergColumns);
     }
 
     public static Map<PartitionField, Integer> getIdentityPartitions(PartitionSpec partitionSpec)
@@ -849,15 +862,16 @@ public final class IcebergUtil
         IcebergFileFormat fileFormat = IcebergTableProperties.getFileFormat(tableMetadata.getProperties());
         propertiesBuilder.put(DEFAULT_FILE_FORMAT, fileFormat.toIceberg().toString());
         propertiesBuilder.put(FORMAT_VERSION, Integer.toString(IcebergTableProperties.getFormatVersion(tableMetadata.getProperties())));
+        propertiesBuilder.put(COMMIT_NUM_RETRIES, Integer.toString(IcebergTableProperties.getMaxCommitRetry(tableMetadata.getProperties())));
 
-        boolean objectStoreEnabled = IcebergTableProperties.getObjectStoreEnabled(tableMetadata.getProperties());
-        if (objectStoreEnabled) {
+        boolean objectStoreLayoutEnabled = IcebergTableProperties.getObjectStoreLayoutEnabled(tableMetadata.getProperties());
+        if (objectStoreLayoutEnabled) {
             propertiesBuilder.put(OBJECT_STORE_ENABLED, "true");
         }
         Optional<String> dataLocation = IcebergTableProperties.getDataLocation(tableMetadata.getProperties());
         dataLocation.ifPresent(location -> {
-            if (!objectStoreEnabled) {
-                throw new TrinoException(INVALID_TABLE_PROPERTY, "Data location can only be set when object store is enabled");
+            if (!objectStoreLayoutEnabled) {
+                throw new TrinoException(INVALID_TABLE_PROPERTY, "Data location can only be set when object store layout is enabled");
             }
             propertiesBuilder.put(WRITE_DATA_LOCATION, location);
         });
@@ -866,7 +880,7 @@ public final class IcebergUtil
         List<String> orcBloomFilterColumns = IcebergTableProperties.getOrcBloomFilterColumns(tableMetadata.getProperties());
         if (!orcBloomFilterColumns.isEmpty()) {
             checkFormatForProperty(fileFormat.toIceberg(), FileFormat.ORC, ORC_BLOOM_FILTER_COLUMNS_PROPERTY);
-            validateOrcBloomFilterColumns(tableMetadata, orcBloomFilterColumns);
+            validateOrcBloomFilterColumns(tableMetadata.getColumns(), orcBloomFilterColumns);
             propertiesBuilder.put(ORC_BLOOM_FILTER_COLUMNS, Joiner.on(",").join(orcBloomFilterColumns));
             propertiesBuilder.put(ORC_BLOOM_FILTER_FPP, String.valueOf(IcebergTableProperties.getOrcBloomFilterFpp(tableMetadata.getProperties())));
         }
@@ -875,7 +889,7 @@ public final class IcebergUtil
         List<String> parquetBloomFilterColumns = IcebergTableProperties.getParquetBloomFilterColumns(tableMetadata.getProperties());
         if (!parquetBloomFilterColumns.isEmpty()) {
             checkFormatForProperty(fileFormat.toIceberg(), FileFormat.PARQUET, PARQUET_BLOOM_FILTER_COLUMNS_PROPERTY);
-            validateParquetBloomFilterColumns(tableMetadata, parquetBloomFilterColumns);
+            validateParquetBloomFilterColumns(tableMetadata.getColumns(), parquetBloomFilterColumns);
             for (String column : parquetBloomFilterColumns) {
                 propertiesBuilder.put(PARQUET_BLOOM_FILTER_COLUMN_ENABLED_PREFIX + column, "true");
             }
@@ -985,16 +999,16 @@ public final class IcebergUtil
                 .snapshotId();
     }
 
-    private static void checkFormatForProperty(FileFormat actualStorageFormat, FileFormat expectedStorageFormat, String propertyName)
+    public static void checkFormatForProperty(FileFormat actualStorageFormat, FileFormat expectedStorageFormat, String propertyName)
     {
         if (actualStorageFormat != expectedStorageFormat) {
             throw new TrinoException(INVALID_TABLE_PROPERTY, format("Cannot specify %s table property for storage format: %s", propertyName, actualStorageFormat));
         }
     }
 
-    private static void validateOrcBloomFilterColumns(ConnectorTableMetadata tableMetadata, List<String> orcBloomFilterColumns)
+    public static void validateOrcBloomFilterColumns(List<ColumnMetadata> columns, List<String> orcBloomFilterColumns)
     {
-        Set<String> allColumns = tableMetadata.getColumns().stream()
+        Set<String> allColumns = columns.stream()
                 .map(ColumnMetadata::getName)
                 .collect(toImmutableSet());
         if (!allColumns.containsAll(orcBloomFilterColumns)) {
@@ -1002,9 +1016,9 @@ public final class IcebergUtil
         }
     }
 
-    private static void validateParquetBloomFilterColumns(ConnectorTableMetadata tableMetadata, List<String> parquetBloomFilterColumns)
+    public static void validateParquetBloomFilterColumns(List<ColumnMetadata> columns, List<String> parquetBloomFilterColumns)
     {
-        Map<String, Type> columnTypes = tableMetadata.getColumns().stream()
+        Map<String, Type> columnTypes = columns.stream()
                 .collect(toImmutableMap(ColumnMetadata::getName, ColumnMetadata::getType));
         for (String column : parquetBloomFilterColumns) {
             Type type = columnTypes.get(column);
@@ -1056,6 +1070,7 @@ public final class IcebergUtil
     public static void commit(SnapshotUpdate<?> update, ConnectorSession session)
     {
         update.set(TRINO_QUERY_ID_NAME, session.getQueryId());
+        update.set(TRINO_USER_NAME, session.getUser());
         update.commit();
     }
 

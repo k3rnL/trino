@@ -14,6 +14,7 @@ Cassandra       <connector/cassandra>
 ClickHouse      <connector/clickhouse>
 Delta Lake      <connector/delta-lake>
 Druid           <connector/druid>
+DuckDB          <connector/duckdb>
 Elasticsearch   <connector/elasticsearch>
 Exasol          <connector/exasol>
 Faker           <connector/faker>
@@ -25,8 +26,8 @@ Ignite          <connector/ignite>
 InfluxDB        <connector/influxdb>
 JMX             <connector/jmx>
 Kafka           <connector/kafka>
-Kinesis         <connector/kinesis>
 Kudu            <connector/kudu>
+Loki            <connector/loki>
 MariaDB         <connector/mariadb>
 Memory          <connector/memory>
 MongoDB         <connector/mongodb>

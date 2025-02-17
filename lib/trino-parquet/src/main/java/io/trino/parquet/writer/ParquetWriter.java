@@ -129,7 +129,7 @@ public class ParquetWriter
             Optional<ParquetWriteValidationBuilder> validationBuilder)
     {
         this.validationBuilder = requireNonNull(validationBuilder, "validationBuilder is null");
-        this.outputStream = new OutputStreamSliceOutput(requireNonNull(outputStream, "outputstream is null"));
+        this.outputStream = new OutputStreamSliceOutput(requireNonNull(outputStream, "outputStream is null"));
         this.messageType = requireNonNull(messageType, "messageType is null");
         this.primitiveTypes = requireNonNull(primitiveTypes, "primitiveTypes is null");
         this.writerOption = requireNonNull(writerOption, "writerOption is null");
@@ -350,7 +350,7 @@ public class ParquetWriter
             columnMetaDataBuilder.add(columnMetaData);
             currentOffset += columnMetaData.getTotal_compressed_size();
         }
-        updateRowGroups(columnMetaDataBuilder.build());
+        updateRowGroups(columnMetaDataBuilder.build(), outputStream.longSize());
 
         // flush pages
         for (BufferData bufferData : bufferDataList) {
@@ -409,12 +409,14 @@ public class ParquetWriter
         }
     }
 
-    private void updateRowGroups(List<ColumnMetaData> columnMetaData)
+    private void updateRowGroups(List<ColumnMetaData> columnMetaData, long fileOffset)
     {
         long totalCompressedBytes = columnMetaData.stream().mapToLong(ColumnMetaData::getTotal_compressed_size).sum();
         long totalBytes = columnMetaData.stream().mapToLong(ColumnMetaData::getTotal_uncompressed_size).sum();
         ImmutableList<org.apache.parquet.format.ColumnChunk> columnChunks = columnMetaData.stream().map(ParquetWriter::toColumnChunk).collect(toImmutableList());
-        fileFooter.addRowGroup(new RowGroup(columnChunks, totalBytes, rows).setTotal_compressed_size(totalCompressedBytes));
+        fileFooter.addRowGroup(new RowGroup(columnChunks, totalBytes, rows)
+                .setTotal_compressed_size(totalCompressedBytes)
+                .setFile_offset(fileOffset));
     }
 
     private static Slice serializeFooter(FileMetaData fileMetaData)

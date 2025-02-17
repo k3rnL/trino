@@ -20,7 +20,9 @@ import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hbase.StartMiniClusterOption;
+import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.zookeeper.MiniZooKeeperCluster;
+import org.apache.phoenix.query.HBaseFactoryProvider;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -88,6 +90,12 @@ public final class TestingPhoenixServer
         }
     }
 
+    public Connection getConnection()
+            throws IOException
+    {
+        return HBaseFactoryProvider.getHConnectionFactory().createConnection(this.conf);
+    }
+
     @Override
     public void close()
     {
@@ -108,6 +116,7 @@ public final class TestingPhoenixServer
 
     public String getJdbcUrl()
     {
-        return format("jdbc:phoenix:localhost:%d:/hbase;phoenix.schema.isNamespaceMappingEnabled=true", port);
+        // Alternative: "jdbc:phoenix+rpc:localhost\\:%d;phoenix.schema.isNamespaceMappingEnabled=true" where %d = master's port
+        return format("jdbc:phoenix+zk:localhost\\:%d:/hbase;phoenix.schema.isNamespaceMappingEnabled=true", port);
     }
 }

@@ -16,8 +16,33 @@ export enum StoreKey {
 }
 
 export const Texts = {
+    Auth: {
+        Authenticating: 'Authenticating to Trino...',
+        LoginForm: {
+            PasswordNotAllowed: 'Password not allowed',
+            Username: 'Username',
+            Password: 'Password',
+            UsernameMustBeDefined: 'Username must be defined',
+            LogIn: 'Log in',
+            LoggingIn: 'Logging in...',
+        },
+        Logout: 'Log Out',
+        InvalidUsernameOrPassword: 'Invalid username or password',
+        NotAvailableAuthInfo: 'Authentication information not available',
+        NotImplementedAuthType: 'The configured authentication type is not supported',
+    },
+    Api: {
+        FetchingData: 'Fetching data...',
+        Stats: {
+            Name: 'Cluster statistics',
+        },
+    },
     Error: {
         NotImplemented: 'This feature is not implemented',
+        Communication: 'Communication error to Trino.',
+        Forbidden: 'Forbidden',
+        Network: 'The network has wandered off, please try again later!',
+        NodeInformationNotLoaded: 'Node information could not be loaded',
     },
     Menu: {
         Header: {
@@ -29,7 +54,8 @@ export const Texts = {
         Drawer: {
             Dashboard: 'Dashboard',
             Workers: 'Workers',
-            QueryHistory: 'Query History',
+            QueryHistory: 'Query history',
+            DemoComponents: 'Demo components',
         },
     },
 }

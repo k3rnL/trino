@@ -66,8 +66,6 @@ import static java.util.concurrent.TimeUnit.MINUTES;
 })
 public class HiveConfig
 {
-    public static final String CONFIGURATION_HIVE_PARTITION_PROJECTION_ENABLED = "hive.partition-projection-enabled";
-
     private boolean singleStatementWritesOnly;
 
     private DataSize maxSplitSize = DataSize.of(64, MEGABYTE);
@@ -126,7 +124,7 @@ public class HiveConfig
     private boolean sortedWritingEnabled = true;
     private boolean propagateTableScanSortingProperties;
 
-    private boolean optimizeMismatchedBucketCount;
+    private boolean optimizeMismatchedBucketCount = true;
     private boolean writesToNonManagedTablesEnabled;
     private boolean createsOfNonManagedTablesEnabled = true;
 
@@ -906,7 +904,7 @@ public class HiveConfig
     }
 
     @Config("hive.bucket-execution")
-    @ConfigDescription("Enable bucket-aware execution: only use a single worker per bucket")
+    @ConfigDescription("Enable bucket-aware execution: use physical bucketing information to optimize queries")
     public HiveConfig setBucketExecutionEnabled(boolean bucketExecutionEnabled)
     {
         this.bucketExecutionEnabled = bucketExecutionEnabled;
@@ -1249,7 +1247,7 @@ public class HiveConfig
         return partitionProjectionEnabled;
     }
 
-    @Config(CONFIGURATION_HIVE_PARTITION_PROJECTION_ENABLED)
+    @Config("hive.partition-projection-enabled")
     @ConfigDescription("Enables AWS Athena partition projection")
     public HiveConfig setPartitionProjectionEnabled(boolean enabledAthenaPartitionProjection)
     {
